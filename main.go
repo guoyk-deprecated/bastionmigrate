@@ -6,11 +6,15 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/yankeguo/bastion/daemon"
 	newModels "github.com/yankeguo/bastion/daemon/models"
 	newTypes "github.com/yankeguo/bastion/types"
 	oldModels "github.com/yankeguo/bunker/models"
 	oldTypes "github.com/yankeguo/bunker/types"
+	"io"
 	"os"
+	"path/filepath"
+	"strconv"
 )
 
 var (
@@ -184,4 +188,47 @@ func main() {
 			log.Info().Interface("session", newSession).Msg("grant imported")
 		}
 	}
+
+	// replay files
+	var files []string
+	if files, err = filepath.Glob(replaysIn + "/*/*/*/*"); err != nil {
+		panic(err)
+	}
+	for _, file := range files {
+		var id int64
+		if id, err = strconv.ParseInt(filepath.Base(file), 16, 64); err != nil {
+			log.Error().Str("oldFile", file).Err(err).Msg("failed to calculate id")
+			panic(err)
+		}
+		newFile := daemon.FilenameForSessionID(id, replaysOut)
+		if err = os.MkdirAll(filepath.Dir(newFile), 0750); err != nil {
+			log.Error().Str("file", newFile).Err(err).Msg("failed to create directory")
+			panic(err)
+		}
+		if err = CopyFile(file, newFile); err != nil {
+			log.Error().Str("file", newFile).Err(err).Str("oldFile", file).Msg("failed to link files")
+			panic(err)
+		}
+		log.Info().Str("file", newFile).Str("oldFile", file).Msg("file copied")
+	}
+}
+
+func CopyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+	return out.Close()
 }
