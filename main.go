@@ -22,6 +22,8 @@ var (
 	replaysIn  string
 	dbOut      string
 	replaysOut string
+
+	sessionIDsOldToNew = map[int64]int64{}
 )
 
 func main() {
@@ -168,12 +170,11 @@ func main() {
 
 	// sessions
 	oldSessions := []oldModels.Session{}
-	if err = oldDB.Find(&oldSessions).Error; err != nil {
+	if err = oldDB.Order("id ASC").Find(&oldSessions).Error; err != nil {
 		panic(err)
 	}
 	for _, oldSession := range oldSessions {
 		newSession := newModels.Session{}
-		newSession.Id = int64(oldSession.ID)
 		newSession.Account = oldSession.UserAccount
 		newSession.Command = oldSession.Command
 		newSession.CreatedAt = oldSession.CreatedAt.Unix()
@@ -187,6 +188,13 @@ func main() {
 		} else {
 			log.Info().Interface("session", newSession).Msg("grant imported")
 		}
+		if newSession.Id != int64(oldSession.ID) {
+			sessionIDsOldToNew[int64(oldSession.ID)] = newSession.Id
+		}
+	}
+
+	for oldId, newId := range sessionIDsOldToNew {
+		log.Info().Int64("oldId", oldId).Int64("newId", newId).Msg("session id remapped")
 	}
 
 	// replay files
@@ -200,6 +208,9 @@ func main() {
 			log.Error().Str("oldFile", file).Err(err).Msg("failed to calculate id")
 			panic(err)
 		}
+		if sessionIDsOldToNew[id] != 0 {
+			id = sessionIDsOldToNew[id]
+		}
 		newFile := daemon.FilenameForSessionID(id, replaysOut)
 		if err = os.MkdirAll(filepath.Dir(newFile), 0750); err != nil {
 			log.Error().Str("file", newFile).Err(err).Msg("failed to create directory")
@@ -211,6 +222,7 @@ func main() {
 		}
 		log.Info().Str("file", newFile).Str("oldFile", file).Msg("file copied")
 	}
+
 }
 
 func CopyFile(src, dst string) error {
