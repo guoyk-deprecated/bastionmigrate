@@ -186,7 +186,7 @@ func main() {
 			log.Error().Interface("session", newSession).Err(err).Msg("failed to import session")
 			panic(err)
 		} else {
-			log.Info().Interface("session", newSession).Msg("grant imported")
+			log.Info().Interface("session", newSession).Msg("session imported")
 		}
 		if newSession.Id != int64(oldSession.ID) {
 			sessionIDsOldToNew[int64(oldSession.ID)] = newSession.Id
